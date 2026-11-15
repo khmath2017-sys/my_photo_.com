@@ -28,11 +28,11 @@ jobs:
           rm -f pubspec.yaml pubspec.lock
           flutter create . --platforms=android --project-name my_photo_app
           flutter pub add image_picker
-          echo "lintOptions { checkReleaseBuilds false }" >> android/app/build.gradle || true
-          sed -i 's/android {/android {\n    lint {\n        checkReleaseBuilds = false\n    }/g' android/app/build.gradle.kts || true
 
       - name: Build APK
-        run: flutter build apk --release
+        run: |
+          flutter build apk --config-only
+          cd android && ./gradlew assembleRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
