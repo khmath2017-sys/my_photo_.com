@@ -16,7 +16,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -30,9 +30,7 @@ jobs:
           flutter pub add image_picker
 
       - name: Build APK
-        run: |
-          flutter build apk --config-only
-          cd android && ./gradlew assembleRelease -x lintVitalAnalyzeRelease -x lintVitalReportRelease
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
