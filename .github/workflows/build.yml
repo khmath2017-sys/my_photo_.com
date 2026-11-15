@@ -1,4 +1,4 @@
-name: Build Flutter APK
+ name: Build Flutter APK
 
 on:
   push:
@@ -23,12 +23,11 @@ jobs:
         with:
           channel: 'stable'
 
-      - name: Create Android platform files
-        run: flutter create . --platforms=android --project-name my_photo_app
-
-
-      - name: Install dependencies
-        run: flutter pub get
+      - name: Create clean Flutter project
+        run: |
+          rm -f pubspec.yaml pubspec.lock
+          flutter create . --platforms=android --project-name my_photo_app
+          flutter pub add image_picker
 
       - name: Build APK
         run: flutter build apk --release
@@ -38,3 +37,4 @@ jobs:
         with:
           name: app-release
           path: build/app/outputs/flutter-apk/app-release.apk
+
