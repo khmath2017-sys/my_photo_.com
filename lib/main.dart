@@ -227,10 +227,37 @@ Uint8List? _bgTask(Map<String, dynamic> m) {
   for (int y = 0; y < rgba.height; y++) {
     for (int x = 0; x < rgba.width; x++) {
       final p = rgba.getPixel(x, y);
-      if ((p.r - bg.r).abs() + (p.g - bg.g).abs() + (p.b - bg.b).abs() < tol) rgba.setPixelRgba(x, y, 0, 0, 0, 0);
+      if ((p.r - bg.r).abs() + (p.g - bg.g).abs() + (p.b - bg.b).abs() < tol) {
+        rgba.setPixelRgba(x, y, 0, 0, 0, 0);
+      }
     }
   }
   return Uint8List.fromList(img.encodePng(rgba));
+}
+
+Uint8List? _mergeBgTask(Map<String, dynamic> m) {
+  final fg = img.decodeImage(m['fg'] as Uint8List);
+  if (fg == null) return null;
+  final int? colorVal = m['color'] as int?;
+  final Uint8List? bgBytes = m['bgImg'] as Uint8List?;
+
+  if (colorVal == null && bgBytes == null) {
+    return m['fg'] as Uint8List;
+  }
+
+  img.Image canvas = img.Image(width: fg.width, height: fg.height, numChannels: 4);
+  if (bgBytes != null) {
+    final bgDecoded = img.decodeImage(bgBytes);
+    if (bgDecoded != null) {
+      canvas = img.copyResize(bgDecoded, width: fg.width, height: fg.height).convert(numChannels: 4);
+    }
+  } else if (colorVal != null) {
+    final c = Color(colorVal);
+    img.fill(canvas, color: img.ColorRgba8((c.r * 255).round(), (c.g * 255).round(), (c.b * 255).round(), 255));
+  }
+
+  img.compositeImage(canvas, fg);
+  return Uint8List.fromList(img.encodePng(canvas));
 }
 
 class RemoveBgScreen extends StatefulWidget {
@@ -241,7 +268,8 @@ class RemoveBgScreen extends StatefulWidget {
 
 class _RemoveBgScreenState extends State<RemoveBgScreen> {
   final _picker = ImagePicker();
-  Uint8List? _orig, _out;
+  Uint8List? _orig, _cutout, _finalOut, _bgImageBytes;
+  Color? _selectedColor;
   double _tol = 35;
   bool _busy = false;
 
@@ -249,60 +277,162 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
     final f = await _picker.pickImage(source: ImageSource.gallery);
     if (f != null) {
       final b = await File(f.path).readAsBytes();
-      setState(() { _orig = b; _out = null; });
-      await _run();
+      setState(() {
+        _orig = b;
+        _cutout = null;
+        _finalOut = null;
+        _selectedColor = null;
+        _bgImageBytes = null;
+      });
+      await _runCutout();
     }
   }
 
-  Future<void> _run() async {
+  Future<void> _runCutout() async {
     if (_orig == null) return;
     setState(() => _busy = true);
     try {
       final res = await compute(_bgTask, {'b': _orig!, 't': _tol.toInt()});
-      setState(() => _out = res);
+      _cutout = res;
+      await _applyBackground();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  Future<void> _applyBackground() async {
+    if (_cutout == null) return;
+    setState(() => _busy = true);
+    try {
+      final merged = await compute(_mergeBgTask, {
+        'fg': _cutout!,
+        'color': _selectedColor?.toARGB32(),
+        'bgImg': _bgImageBytes,
+      });
+      if (mounted) setState(() => _finalOut = merged);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickBgImage() async {
+    final f = await _picker.pickImage(source: ImageSource.gallery);
+    if (f != null) {
+      final b = await File(f.path).readAsBytes();
+      setState(() {
+        _bgImageBytes = b;
+        _selectedColor = null;
+      });
+      await _applyBackground();
+    }
+  }
+
   Future<void> _save() async {
-    if (_out == null) return;
+    if (_finalOut == null) return;
     try {
       if (!await Gal.hasAccess()) await Gal.requestAccess();
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/nobg_${DateTime.now().millisecondsSinceEpoch}.png');
-      await file.writeAsBytes(_out!);
+      final file = File('${dir.path}/bg_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(_finalOut!);
       await Gal.putImage(file.path);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Прозрачный PNG сохранен!')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сохранено в галерею!')));
+      }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
+      }
     }
+  }
+
+  Widget _colorDot(Color? color, String label) {
+    final isSelected = (_selectedColor == color && _bgImageBytes == null);
+    return GestureDetector(
+      onTap: () async {
+        setState(() {
+          _selectedColor = color;
+          _bgImageBytes = null;
+        });
+        await _applyBackground();
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 5),
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: color ?? Colors.grey.shade300,
+          shape: BoxShape.circle,
+          border: Border.all(color: isSelected ? Colors.blue : Colors.black26, width: isSelected ? 3 : 1),
+        ),
+        child: color == null ? const Icon(Icons.grid_off, size: 18, color: Colors.black54) : null,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Убрать фон')),
+      appBar: AppBar(title: const Text('Убрать и заменить фон')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            if (_out != null) ...[
+            if (_finalOut != null) ...[
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.blueGrey.shade800,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Image.memory(_out!, height: 220),
+                child: Image.memory(_finalOut!, height: 220),
               ),
-              const SizedBox(height: 10),
-              Text('Чувствительность: ${_tol.toInt()}'),
-              Slider(value: _tol, min: 5, max: 80, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _run()),
-              ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить PNG')),
-            ] else if (_busy) const CircularProgressIndicator() else const Icon(Icons.auto_fix_high, size: 120, color: Colors.grey),
+              const SizedBox(height: 12),
+              Text('Чувствительность удаления: ${_tol.toInt()}'),
+              Slider(value: _tol, min: 5, max: 80, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _runCutout()),
+              const Text('Выберите новый фон:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _colorDot(null, 'Прозрачный'),
+                    _colorDot(Colors.white, 'Белый'),
+                    _colorDot(Colors.blue, 'Синий'),
+                    _colorDot(Colors.red, 'Красный'),
+                    _colorDot(Colors.amber, 'Желтый'),
+                    _colorDot(Colors.green, 'Зеленый'),
+                    _colorDot(Colors.black, 'Черный'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _pickBgImage,
+                icon: const Icon(Icons.wallpaper),
+                label: const Text('Фон из галереи'),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _save,
+                icon: const Icon(Icons.save),
+                label: const Text('Сохранить фото'),
+                style: ElevatedButton.styleFrom(minimumSize: const Size(220, 48)),
+              ),
+            ] else if (_busy)
+              const Padding(padding: EdgeInsets.all(50), child: CircularProgressIndicator())
+            else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 50),
+                child: Icon(Icons.auto_fix_high, size: 120, color: Colors.grey),
+              ),
             const SizedBox(height: 20),
-            OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
+            OutlinedButton.icon(
+              onPressed: _pick,
+              icon: const Icon(Icons.photo),
+              label: const Text('Выбрать основное фото'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(220, 48)),
+            ),
           ],
         ),
       ),
