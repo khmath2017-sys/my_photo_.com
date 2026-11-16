@@ -77,50 +77,85 @@ class CompressScreen extends StatefulWidget {
   State<CompressScreen> createState() => _CompressScreenState();
 }
 
+Uint8List? _compressTask(Map<String, dynamic> m) {
+  var im = img.decodeImage(m['bytes'] as Uint8List);
+  if (im == null) return null;
+  final int scale = m['scale'] as int;
+  final int quality = m['quality'] as int;
+
+  if (scale < 100) {
+    final newW = (im.width * scale / 100).round();
+    if (newW > 50) {
+      im = img.copyResize(im, width: newW);
+    }
+  } else if (im.width > 2000 || im.height > 2000) {
+    im = img.copyResize(im, width: 2000);
+  }
+  return Uint8List.fromList(img.encodeJpg(im, quality: quality));
+}
+
+class CompressScreen extends StatefulWidget {
+  const CompressScreen({super.key});
+  @override
+  State<CompressScreen> createState() => _CompressScreenState();
+}
+
 class _CompressScreenState extends State<CompressScreen> {
   final _picker = ImagePicker();
-  File? _orig;
-  Uint8List? _comp;
-  double _q = 50;
+  Uint8List? _origBytes, _compBytes;
+  double _quality = 70;
+  double _scale = 80;
   int _s1 = 0, _s2 = 0;
   bool _busy = false;
 
   Future<void> _pick() async {
     final f = await _picker.pickImage(source: ImageSource.gallery);
     if (f != null) {
-      final file = File(f.path);
-      final len = await file.length();
-      setState(() { _orig = file; _s1 = len; _comp = null; });
+      final bytes = await File(f.path).readAsBytes();
+      setState(() {
+        _origBytes = bytes;
+        _s1 = bytes.length;
+        _compBytes = null;
+      });
       await _run();
     }
   }
 
   Future<void> _run() async {
-    if (_orig == null) return;
+    if (_origBytes == null) return;
     setState(() => _busy = true);
     try {
-      final int maxDim = (600 + (_q * 12)).toInt();
-      final res = await FlutterImageCompress.compressWithFile(
-        _orig!.absolute.path,
-        minWidth: maxDim,
-        minHeight: maxDim,
-        quality: _q.toInt(),
-        format: CompressFormat.jpeg,
-      );
-      if (res != null) setState(() { _comp = res; _s2 = res.length; });
+      final res = await compute(_compressTask, {
+        'bytes': _origBytes!,
+        'quality': _quality.toInt(),
+        'scale': _scale.toInt(),
+      });
+      if (res != null && mounted) {
+        setState(() {
+          _compBytes = res;
+          _s2 = res.length;
+        });
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   Future<void> _save() async {
-    if (_comp == null) return;
+    if (_compBytes == null) return;
     try {
       if (!await Gal.hasAccess()) await Gal.requestAccess();
-      await Gal.putImageBytes(_comp!);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сохранено в галерею!')));
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/comp_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      await file.writeAsBytes(_compBytes!);
+      await Gal.putImage(file.path);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сохранено в галерею!')));
+      }
     } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
+      }
     }
   }
 
@@ -135,22 +170,55 @@ class _CompressScreenState extends State<CompressScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            if (_orig != null) ...[
-              _comp != null ? Image.memory(_comp!, height: 220) : Image.file(_orig!, height: 220),
-              const SizedBox(height: 15),
+            if (_origBytes != null) ...[
+              Image.memory(_compBytes ?? _origBytes!, height: 210),
+              const SizedBox(height: 12),
               Text('Было: ${_fmt(_s1)}', style: const TextStyle(fontSize: 16)),
-              if (_comp != null)
+              if (_compBytes != null)
                 Text(
-                  'Стало: ${_fmt(_s2)} (${savedPercent > 0 ? "-$savedPercent%" : "мин. размер"})',
+                  'Стало: ${_fmt(_s2)} (${savedPercent > 0 ? "-$savedPercent%" : "оптимально"})',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
                 ),
               const SizedBox(height: 10),
-              Text('Качество: ${_q.toInt()}%'),
-              Slider(value: _q, min: 10, max: 90, divisions: 16, label: '${_q.toInt()}%', onChanged: (v) => setState(() => _q = v), onChangeEnd: (_) => _run()),
-              if (_busy) const CircularProgressIndicator() else ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить в галерею')),
-            ] else const Icon(Icons.image, size: 120, color: Colors.grey),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
+              Text('Качество: ${_quality.toInt()}%'),
+              Slider(
+                value: _quality,
+                min: 10,
+                max: 95,
+                divisions: 17,
+                onChanged: (v) => setState(() => _quality = v),
+                onChangeEnd: (_) => _run(),
+              ),
+              Text('Размер (масштаб): ${_scale.toInt()}%'),
+              Slider(
+                value: _scale,
+                min: 20,
+                max: 100,
+                divisions: 8,
+                onChanged: (v) => setState(() => _scale = v),
+                onChangeEnd: (_) => _run(),
+              ),
+              if (_busy)
+                const Padding(padding: EdgeInsets.all(8.0), child: CircularProgressIndicator())
+              else
+                ElevatedButton.icon(
+                  onPressed: _save,
+                  icon: const Icon(Icons.save),
+                  label: const Text('Сохранить в галерею'),
+                  style: ElevatedButton.styleFrom(minimumSize: const Size(220, 48)),
+                ),
+            ] else
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 50),
+                child: Icon(Icons.image, size: 120, color: Colors.grey),
+              ),
+            const SizedBox(height: 15),
+            OutlinedButton.icon(
+              onPressed: _pick,
+              icon: const Icon(Icons.photo),
+              label: const Text('Выбрать фото'),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(220, 48)),
+            ),
           ],
         ),
       ),
