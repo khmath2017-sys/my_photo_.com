@@ -71,14 +71,24 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
     super.dispose();
   }
 
-  Future<void> _pickAndCutout() async {
+    Future<void> _pickAndCutout() async {
     if (!_engineReady) return;
     final f = await _picker.pickImage(source: ImageSource.gallery);
     if (f == null) return;
     setState(() { _busy = true; _cutoutPngBytes = null; _finalOutBytes = null; });
     try {
       final rawBytes = await File(f.path).readAsBytes();
-      final uiImage = await BackgroundRemover.instance.removeBg(rawBytes);
+      // تصغير الصورة الضخمة لحماية الرام قبل العزل
+      final safeBytes = await compute((Uint8List b) {
+        var im = img.decodeImage(b);
+        if (im == null) return b;
+        if (im.width > 1024 || im.height > 1024) {
+          im = img.copyResize(im, width: im.width >= im.height ? 1024 : null, height: im.height > im.width ? 1024 : null);
+        }
+        return Uint8List.fromList(img.encodeJpg(im, quality: 90));
+      }, rawBytes);
+
+      final uiImage = await BackgroundRemover.instance.removeBg(safeBytes);
       final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
       if (byteData != null) {
         _cutoutPngBytes = byteData.buffer.asUint8List();
