@@ -305,42 +305,32 @@ Uint8List? _bgTask(Map<String, dynamic> m) {
   if (im == null) return null;
   if (im.width > 1200 || im.height > 1200) im = img.copyResize(im, width: 1200);
   final rgba = im.convert(numChannels: 4);
-  final bg = rgba.getPixel(0, 0);
+
+  // أخذ متوسط لون الزوايا الأربع بدلاً من زاوية واحدة لدقة أعلى
+  final p1 = rgba.getPixel(2, 2);
+  final p2 = rgba.getPixel(rgba.width - 3, 2);
+  final p3 = rgba.getPixel(2, rgba.height - 3);
+  final p4 = rgba.getPixel(rgba.width - 3, rgba.height - 3);
+
+  final bgR = (p1.r + p2.r + p3.r + p4.r) / 4;
+  final bgG = (p1.g + p2.g + p3.g + p4.g) / 4;
+  final bgB = (p1.b + p2.b + p3.b + p4.b) / 4;
+
   final tol = (m['t'] as int) * 3;
   for (int y = 0; y < rgba.height; y++) {
     for (int x = 0; x < rgba.width; x++) {
       final p = rgba.getPixel(x, y);
-      if ((p.r - bg.r).abs() + (p.g - bg.g).abs() + (p.b - bg.b).abs() < tol) {
+      final diff = (p.r - bgR).abs() + (p.g - bgG).abs() + (p.b - bgB).abs();
+      if (diff < tol) {
         rgba.setPixelRgba(x, y, 0, 0, 0, 0);
+      } else if (diff < tol + 25) {
+        // تنعيم الحواف لتجنب التعرجات الحادة
+        final alpha = (((diff - tol) / 25) * 255).round().clamp(0, 255);
+        rgba.setPixelRgba(x, y, p.r.toInt(), p.g.toInt(), p.b.toInt(), alpha);
       }
     }
   }
   return Uint8List.fromList(img.encodePng(rgba));
-}
-
-Uint8List? _mergeBgTask(Map<String, dynamic> m) {
-  final fg = img.decodeImage(m['fg'] as Uint8List);
-  if (fg == null) return null;
-  final int? colorVal = m['color'] as int?;
-  final Uint8List? bgBytes = m['bgImg'] as Uint8List?;
-
-  if (colorVal == null && bgBytes == null) {
-    return m['fg'] as Uint8List;
-  }
-
-  img.Image canvas = img.Image(width: fg.width, height: fg.height, numChannels: 4);
-  if (bgBytes != null) {
-    final bgDecoded = img.decodeImage(bgBytes);
-    if (bgDecoded != null) {
-      canvas = img.copyResize(bgDecoded, width: fg.width, height: fg.height).convert(numChannels: 4);
-    }
-  } else if (colorVal != null) {
-    final c = Color(colorVal);
-    img.fill(canvas, color: img.ColorRgba8((c.r * 255).round(), (c.g * 255).round(), (c.b * 255).round(), 255));
-  }
-
-  img.compositeImage(canvas, fg);
-  return Uint8List.fromList(img.encodePng(canvas));
 }
 
 class RemoveBgScreen extends StatefulWidget {
