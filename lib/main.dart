@@ -316,17 +316,39 @@ class _CompressScreenState extends State<CompressScreen> {
                   label: const Text('Сохранить в галерею'),
                   style: ElevatedButton.styleFrom(minimumSize: const Size(220, 48)),
                 ),
-            ] else
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 50),
-                child: Icon(Icons.image, size: 120, color: Colors.grey),
+                } else
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 30, bottom: 25),
+                padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFF00897B).withValues(alpha: 0.3), width: 1.5),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 6))],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: const Color(0xFF00897B).withValues(alpha: 0.1), shape: BoxShape.circle),
+                      child: const Icon(Icons.compress_rounded, size: 54, color: Color(0xFF00897B)),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text('Выберите фото для сжатия', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    const Text('Уменьшите вес файла без заметной потери качества', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 13)),
+                  ],
+                ),
               ),
-            const SizedBox(height: 15),
-            OutlinedButton.icon(
-              onPressed: _pick,
-              icon: const Icon(Icons.photo),
-              label: const Text('Выбрать фото'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(220, 48)),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: OutlinedButton.icon(
+                onPressed: _pick,
+                icon: const Icon(Icons.add_photo_alternate_rounded, size: 24),
+                label: const Text('Выбрать фото', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
             ),
           ],
         ),
@@ -334,6 +356,7 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 }
+
 
 
 Future<Uint8List> _pdfTask(List<String> paths) async {
@@ -387,21 +410,75 @@ class _PdfScreenState extends State<PdfScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Expanded(
+                        Expanded(
               child: _imgs.isEmpty
-                  ? const Center(child: Text('Выберите фото'))
+                  ? Center(
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFE53935).withValues(alpha: 0.3), width: 1.5),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 6))],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(color: const Color(0xFFE53935).withValues(alpha: 0.1), shape: BoxShape.circle),
+                              child: const Icon(Icons.picture_as_pdf_rounded, size: 54, color: Color(0xFFE53935)),
+                            ),
+                            const SizedBox(height: 18),
+                            const Text('Создайте PDF документ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            const Text('Выберите одно или несколько фото для объединения', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                    )
                   : ListView.builder(
                       itemCount: _imgs.length,
-                      itemBuilder: (_, i) => ListTile(
-                        leading: Image.file(File(_imgs[i].path), width: 50, height: 50, fit: BoxFit.cover),
-                        title: Text('Фото ${i + 1}'),
+                      itemBuilder: (_, i) => Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: ListTile(
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.file(File(_imgs[i].path), width: 50, height: 50, fit: BoxFit.cover),
+                          ),
+                          title: Text('Страница ${i + 1}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          trailing: const Icon(Icons.check_circle, color: Colors.green),
+                        ),
                       ),
                     ),
             ),
-            if (_busy) const CircularProgressIndicator() else ...[
-              OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.add_photo_alternate), label: const Text('Выбрать фото')),
-              const SizedBox(height: 10),
-              if (_imgs.isNotEmpty) ElevatedButton.icon(onPressed: _make, icon: const Icon(Icons.share), label: Text('Создать PDF (${_imgs.length})')),
+            const SizedBox(height: 12),
+            if (_busy)
+              const CircularProgressIndicator()
+            else ...[
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: OutlinedButton.icon(
+                  onPressed: _pick,
+                  icon: const Icon(Icons.add_photo_alternate_rounded),
+                  label: const Text('Выбрать фото', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              if (_imgs.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: _make,
+                    icon: const Icon(Icons.share_rounded),
+                    label: Text('Создать PDF (${_imgs.length} стр.)', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
             ],
           ],
         ),
