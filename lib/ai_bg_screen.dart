@@ -7,7 +7,6 @@ import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_background_remover/image_background_remover.dart';
-
 Uint8List? _composeAndCompressTask(Map<String, dynamic> m) {
   final fg = img.decodeImage(m['fg'] as Uint8List);
   if (fg == null) return null;
@@ -40,3 +39,155 @@ Uint8List? _composeAndCompressTask(Map<String, dynamic> m) {
   img.compositeImage(canvas, resizedFg);
   return Uint8List.fromList(img.encodeJpg(canvas, quality: quality));
 }
+
+class RemoveBgScreen extends StatefulWidget {
+  const RemoveBgScreen({super.key});
+  @override
+  State<RemoveBgScreen> createState() => _RemoveBgScreenState();
+}
+
+class _RemoveBgScreenState extends State<RemoveBgScreen> {
+  final _picker = ImagePicker();
+  Uint8List? _cutoutPngBytes, _finalOutBytes, _bgImageBytes;
+  Color? _selectedColor;
+  double _quality = 80;
+  bool _busy = false;
+  bool _engineReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAiEngine();
+  }
+
+  Future<void> _initAiEngine() async {
+    await BackgroundRemover.instance.initializeOrt();
+    if (mounted) setState(() => _engineReady = true);
+  }
+
+  @override
+  void dispose() {
+    BackgroundRemover.instance.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickAndCutout() async {
+    if (!_engineReady) return;
+    final f = await _picker.pickImage(source: ImageSource.gallery);
+    if (f == null) return;
+    setState(() { _busy = true; _cutoutPngBytes = null; _finalOutBytes = null; });
+    try {
+      final rawBytes = await File(f.path).readAsBytes();
+      final uiImage = await BackgroundRemover.instance.removeBg(rawBytes);
+      final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        _cutoutPngBytes = byteData.buffer.asUint8List();
+        await _rebuildFinalImage();
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка ИИ: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _rebuildFinalImage() async {
+    if (_cutoutPngBytes == null) return;
+    setState(() => _busy = true);
+    try {
+      final bool isTransparent = (_selectedColor == null && _bgImageBytes == null);
+      final out = await compute(_composeAndCompressTask, {
+        'fg': _cutoutPngBytes!,
+        'isTransparent': isTransparent,
+        'color': _selectedColor?.toARGB32(),
+        'bgImg': _bgImageBytes,
+        'quality': _quality.toInt(),
+      });
+      if (mounted) setState(() => _finalOutBytes = out);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickBgImage() async {
+    final f = await _picker.pickImage(source: ImageSource.gallery);
+    if (f != null) {
+      final b = await File(f.path).readAsBytes();
+      setState(() { _bgImageBytes = b; _selectedColor = null; });
+      await _rebuildFinalImage();
+    }
+  }
+
+  Future<void> _save() async {
+    if (_finalOutBytes == null) return;
+    final bool isTransparent = (_selectedColor == null && _bgImageBytes == null);
+    final String ext = isTransparent ? 'png' : 'jpg';
+    try {
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/ai_bg_${DateTime.now().millisecondsSinceEpoch}.$ext');
+      await file.writeAsBytes(_finalOutBytes!);
+      await Gal.putImage(file.path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Сохранено (.$ext)!')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
+    }
+  }
+
+  String _fmt(int b) => b < 1048576 ? '${(b / 1024).toStringAsFixed(1)} КБ' : '${(b / 1048576).toStringAsFixed(2)} МБ';
+
+  Widget _colorDot(Color? color) {
+    final isSelected = (_selectedColor == color && _bgImageBytes == null);
+    return GestureDetector(
+      onTap: () async {
+        setState(() { _selectedColor = color; _bgImageBytes = null; });
+        await _rebuildFinalImage();
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6),
+        width: 38, height: 38,
+        decoration: BoxDecoration(
+          color: color ?? Colors.grey.shade300,
+          shape: BoxShape.circle,
+          border: Border.all(color: isSelected ? Colors.blue : Colors.black26, width: isSelected ? 3 : 1),
+        ),
+        child: color == null ? const Icon(Icons.grid_off, size: 18, color: Colors.black54) : null,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Убрать фон (ИИ)')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            if (!_engineReady)
+              const Padding(padding: EdgeInsets.all(40), child: Column(children: [CircularProgressIndicator(), SizedBox(height: 12), Text('Загрузка ИИ модели...')]))
+            else if (_finalOutBytes != null) ...[
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.blueGrey.shade800, borderRadius: BorderRadius.circular(12)), child: Image.memory(_finalOutBytes!, height: 220)),
+              const SizedBox(height: 8),
+              Text('Размер: ${_fmt(_finalOutBytes!.length)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+              const SizedBox(height: 12),
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [_colorDot(null), _colorDot(Colors.white), _colorDot(Colors.blue), _colorDot(Colors.red), _colorDot(Colors.black)]),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(onPressed: _pickBgImage, icon: const Icon(Icons.wallpaper), label: const Text('Фон из галереи')),
+              const SizedBox(height: 12),
+              Text('Качество и размер: ${_quality.toInt()}%'),
+              Slider(value: _quality, min: 20, max: 100, divisions: 16, onChanged: (v) => setState(() => _quality = v), onChangeEnd: (_) => _rebuildFinalImage()),
+              if (_busy) const CircularProgressIndicator() else ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить')),
+            ] else if (_busy)
+              const Padding(padding: EdgeInsets.all(50), child: Column(children: [CircularProgressIndicator(), SizedBox(height: 12), Text('Удаление фона...')]))
+            else
+              const Padding(padding: EdgeInsets.symmetric(vertical: 50), child: Icon(Icons.auto_fix_high, size: 120, color: Colors.grey)),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(onPressed: _engineReady && !_busy ? _pickAndCutout : null, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
