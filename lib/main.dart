@@ -316,7 +316,7 @@ class _CompressScreenState extends State<CompressScreen> {
                   label: const Text('Сохранить в галерею'),
                   style: ElevatedButton.styleFrom(minimumSize: const Size(220, 48)),
                 ),
-                 else
+              ]else
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(top: 30, bottom: 25),
