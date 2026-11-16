@@ -1,14 +1,13 @@
-import 'ai_bg_screen.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:gal/gal.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
+import 'ai_bg_screen.dart';
 
 void main() => runApp(const MyApp());
 
@@ -17,22 +16,25 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Фото Утилиты',
+      title: 'Фоторедактор ИИ и PDF',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1E88E5)),
+        scaffoldBackgroundColor: const Color(0xFFF4F7FB),
         useMaterial3: true,
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
+            backgroundColor: const Color(0xFF1E88E5),
             foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
         outlinedButtonTheme: OutlinedButtonThemeData(
           style: OutlinedButton.styleFrom(
-            backgroundColor: Colors.blue,
+            backgroundColor: const Color(0xFF1E88E5),
             foregroundColor: Colors.white,
-            side: const BorderSide(color: Colors.blue),
+            side: const BorderSide(color: Color(0xFF1E88E5)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
         ),
       ),
@@ -40,33 +42,139 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Главная'), centerTitle: true),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _btn(context, 'Сжать фото', Icons.compress, const CompressScreen()),
-            const SizedBox(height: 20),
-            _btn(context, 'В PDF', Icons.picture_as_pdf, const PdfScreen()),
-            const SizedBox(height: 20),
-            _btn(context, 'Убрать фон', Icons.auto_fix_high, const RemoveBgScreen()),
-          ],
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'Фоторедактор ИИ',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Color(0xFF1A237E)),
+        ),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Выберите инструмент:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black54),
+              ),
+              const SizedBox(height: 16),
+              _buildProCard(
+                context,
+                title: 'Убрать и заменить фон (ИИ)',
+                subtitle: 'Умное удаление фона и замена на цвет или фото',
+                icon: Icons.auto_fix_high,
+                color: const Color(0xFF1E88E5),
+                page: const RemoveBgScreen(),
+              ),
+              const SizedBox(height: 16),
+              _buildProCard(
+                context,
+                title: 'Сжать фото',
+                subtitle: 'Уменьшение размера файла без потери качества',
+                icon: Icons.compress,
+                color: const Color(0xFF00897B),
+                page: const CompressScreen(),
+              ),
+              const SizedBox(height: 16),
+              _buildProCard(
+                context,
+                title: 'Фото в PDF',
+                subtitle: 'Объединение нескольких снимков в один документ',
+                icon: Icons.picture_as_pdf,
+                color: const Color(0xFFE53935),
+                page: const PdfScreen(),
+              ),
+              const Spacer(),
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.verified_user_outlined, size: 16, color: Colors.grey),
+                      SizedBox(width: 6),
+                      Text(
+                        'Работает офлайн • Без сбора данных',
+                        style: TextStyle(fontSize: 13, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _btn(BuildContext ctx, String txt, IconData ic, Widget page) {
-    return ElevatedButton.icon(
-      onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => page)),
-      icon: Icon(ic, size: 28),
-      label: Text(txt, style: const TextStyle(fontSize: 18)),
-      style: ElevatedButton.styleFrom(minimumSize: const Size(250, 65)),
+  Widget _buildProCard(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required Widget page,
+  }) {
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => page)),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.12),
+              blurRadius: 15,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: color, size: 30),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1C2434)),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 13, color: Colors.black54, height: 1.3),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 18, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
     );
   }
 }
