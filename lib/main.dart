@@ -71,12 +71,6 @@ class HomePage extends StatelessWidget {
   }
 }
 
-class CompressScreen extends StatefulWidget {
-  const CompressScreen({super.key});
-  @override
-  State<CompressScreen> createState() => _CompressScreenState();
-}
-
 Uint8List? _compressTask(Map<String, dynamic> m) {
   var im = img.decodeImage(m['bytes'] as Uint8List);
   if (im == null) return null;
@@ -331,6 +325,30 @@ Uint8List? _bgTask(Map<String, dynamic> m) {
     }
   }
   return Uint8List.fromList(img.encodePng(rgba));
+}
+Uint8List? _mergeBgTask(Map<String, dynamic> m) {
+  final fg = img.decodeImage(m['fg'] as Uint8List);
+  if (fg == null) return null;
+  final int? colorVal = m['color'] as int?;
+  final Uint8List? bgBytes = m['bgImg'] as Uint8List?;
+
+  if (colorVal == null && bgBytes == null) {
+    return m['fg'] as Uint8List;
+  }
+
+  img.Image canvas = img.Image(width: fg.width, height: fg.height, numChannels: 4);
+  if (bgBytes != null) {
+    final bgDecoded = img.decodeImage(bgBytes);
+    if (bgDecoded != null) {
+      canvas = img.copyResize(bgDecoded, width: fg.width, height: fg.height).convert(numChannels: 4);
+    }
+  } else if (colorVal != null) {
+    final c = Color(colorVal);
+    img.fill(canvas, color: img.ColorRgba8((c.r * 255).round(), (c.g * 255).round(), (c.b * 255).round(), 255));
+  }
+
+  img.compositeImage(canvas, fg);
+  return Uint8List.fromList(img.encodePng(canvas));
 }
 
 class RemoveBgScreen extends StatefulWidget {
