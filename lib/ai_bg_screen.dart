@@ -190,14 +190,43 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
               if (_busy) const CircularProgressIndicator() else ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить')),
             ] else if (_busy)
               const Padding(padding: EdgeInsets.all(50), child: Column(children: [CircularProgressIndicator(), SizedBox(height: 12), Text('Удаление фона...')]))
-            else
-              const Padding(padding: EdgeInsets.symmetric(vertical: 50), child: Icon(Icons.auto_fix_high, size: 120, color: Colors.grey)),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(onPressed: _engineReady && !_busy ? _pickAndCutout : null, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
+                        else
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 30, bottom: 25),
+                padding: const EdgeInsets.symmetric(vertical: 45, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFF1E88E5).withValues(alpha: 0.3), width: 1.5),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 15, offset: const Offset(0, 6))],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: const Color(0xFF1E88E5).withValues(alpha: 0.1), shape: BoxShape.circle),
+                      child: const Icon(Icons.auto_fix_high, size: 54, color: Color(0xFF1E88E5)),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text('Загрузите фото для ИИ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    const Text('Нейросеть автоматически удалит фон за пару секунд', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 13)),
+                  ],
+                ),
+              ),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: OutlinedButton.icon(
+                onPressed: _engineReady && !_busy ? _pickAndCutout : null,
+                icon: const Icon(Icons.add_photo_alternate_rounded, size: 24),
+                label: const Text('Выбрать фото из галереи', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 }
-
