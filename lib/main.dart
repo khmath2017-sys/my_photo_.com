@@ -19,11 +19,28 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Фото Утилиты',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            side: const BorderSide(color: Colors.blue),
+          ),
+        ),
+      ),
       home: const HomePage(),
     );
   }
 }
+
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
