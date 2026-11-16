@@ -284,3 +284,14 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
           children: [
             if (_out != null) ...[
               Container(color: Colors.grey.shade300, child: Image.memory(_out!, height: 220)),
+              Slider(value: _tol, min: 10, max: 90, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _run()),
+              ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить PNG')),
+            ] else if (_busy) const CircularProgressIndicator() else const Icon(Icons.auto_fix_high, size: 120, color: Colors.grey),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
+          ],
+        ),
+      ),
+    );
+  }
+}
