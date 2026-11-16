@@ -1,4 +1,4 @@
-name: Build Flutter APK
+name: Build RuStore Release
 
 on:
   push:
@@ -24,23 +24,70 @@ jobs:
         channel: 'stable'
 
     - name: Generate Android files
-      run: flutter create . --platforms=android
+      run: flutter create . --org com.khmath --project-name myphoto --platforms=android
 
-    - name: Configure Android SDK and Disable Lint Crash
+    - name: Decode Keystore and Configure Signing
+      run: |
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/upload-keystore.jks
+        cat <<EOF > android/key.properties
+        storePassword=${{ secrets.STORE_PASSWORD }}
+        keyPassword=${{ secrets.KEY_PASSWORD }}
+        keyAlias=${{ secrets.KEY_ALIAS }}
+        storeFile=upload-keystore.jks
+        EOF
+
+    - name: Configure Gradle SDK, App Name and Release Signing
       run: |
         sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle.kts || true
         sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts || true
-        echo -e "\nandroid {\n    lint {\n        checkReleaseBuilds = false\n        abortOnError = false\n    }\n}" >> android/app/build.gradle.kts
+        sed -i 's/android:label="myphoto"/android:label="Фоторедактор ИИ и PDF"/g' android/app/src/main/AndroidManifest.xml || true
         echo "-keep class ai.onnxruntime.** { *; }" >> android/app/proguard-rules.pro
+        cat <<EOF >> android/app/build.gradle.kts
+        import java.util.Properties
+        import java.io.FileInputStream
+        val keystoreProperties = Properties()
+        val keystorePropertiesFile = rootProject.file("key.properties")
+        if (keystorePropertiesFile.exists()) {
+            keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+        }
+        android {
+            lint {
+                checkReleaseBuilds = false
+                abortOnError = false
+            }
+            signingConfigs {
+                create("release") {
+                    keyAlias = keystoreProperties.getProperty("keyAlias")
+                    keyPassword = keystoreProperties.getProperty("keyPassword")
+                    storeFile = file(keystoreProperties.getProperty("storeFile"))
+                    storePassword = keystoreProperties.getProperty("storePassword")
+                }
+            }
+            buildTypes {
+                getByName("release") {
+                    signingConfig = signingConfigs.getByName("release")
+                }
+            }
+        }
+        EOF
 
     - name: Install dependencies
       run: flutter pub get
       
-    - name: Build APK
+    - name: Build Signed AAB (For RuStore)
+      run: flutter build appbundle --release
+
+    - name: Build Signed APK (For Testing)
       run: flutter build apk --release
       
-    - name: Upload APK
+    - name: Upload RuStore AAB
       uses: actions/upload-artifact@v4
       with:
-        name: app-release
+        name: rustore-release-aab
+        path: build/app/outputs/bundle/release/app-release.aab
+
+    - name: Upload Signed APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: signed-release-apk
         path: build/app/outputs/flutter-apk/app-release.apk
