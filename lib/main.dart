@@ -1,3 +1,4 @@
+
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,22 +10,16 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:image/image.dart' as img;
 
-void main() {
-  runApp(const MyApp());
-}
+void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Фото Утилиты',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), useMaterial3: true),
       home: const HomePage(),
     );
   }
@@ -32,140 +27,82 @@ class MyApp extends StatelessWidget {
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Главная'), centerTitle: true),
       body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildMenuButton(
-                context,
-                title: 'Сжать фото',
-                icon: Icons.compress,
-                page: const CompressScreen(),
-              ),
-              const SizedBox(height: 20),
-              _buildMenuButton(
-                context,
-                title: 'В PDF',
-                icon: Icons.picture_as_pdf,
-                page: const PdfScreen(),
-              ),
-              const SizedBox(height: 20),
-              _buildMenuButton(
-                context,
-                title: 'Убрать фон',
-                icon: Icons.auto_fix_high,
-                page: const RemoveBgScreen(),
-              ),
-            ],
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _btn(context, 'Сжать фото', Icons.compress, const CompressScreen()),
+            const SizedBox(height: 20),
+            _btn(context, 'В PDF', Icons.picture_as_pdf, const PdfScreen()),
+            const SizedBox(height: 20),
+            _btn(context, 'Убрать фон', Icons.auto_fix_high, const RemoveBgScreen()),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildMenuButton(BuildContext context,
-      {required String title, required IconData icon, required Widget page}) {
+  Widget _btn(BuildContext ctx, String txt, IconData ic, Widget page) {
     return ElevatedButton.icon(
-      onPressed: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
-      },
-      icon: Icon(icon, size: 28),
-      label: Text(title, style: const TextStyle(fontSize: 18)),
-      style: ElevatedButton.styleFrom(
-        minimumSize: const Size(250, 65),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      ),
+      onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => page)),
+      icon: Icon(ic, size: 28),
+      label: Text(txt, style: const TextStyle(fontSize: 18)),
+      style: ElevatedButton.styleFrom(minimumSize: const Size(250, 65)),
     );
   }
 }
 
-// ==========================================
-// 1. شاشة ضغط الصور (Сжать фото)
-// ==========================================
 class CompressScreen extends StatefulWidget {
   const CompressScreen({super.key});
-
   @override
   State<CompressScreen> createState() => _CompressScreenState();
 }
 
 class _CompressScreenState extends State<CompressScreen> {
-  final ImagePicker _picker = ImagePicker();
-  File? _originalImage;
-  Uint8List? _compressedBytes;
-  double _quality = 70;
-  int _originalSize = 0;
-  int _compressedSize = 0;
-  bool _isProcessing = false;
+  final _picker = ImagePicker();
+  File? _orig;
+  Uint8List? _comp;
+  double _q = 70;
+  int _s1 = 0, _s2 = 0;
+  bool _busy = false;
 
-  Future<void> _pickImage() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-    if (image != null) {
-      final file = File(image.path);
-      final bytes = await file.length();
-      setState(() {
-        _originalImage = file;
-        _originalSize = bytes;
-        _compressedBytes = null;
-      });
-      await _compressImage();
+  Future<void> _pick() async {
+    final f = await _picker.pickImage(source: ImageSource.gallery);
+    if (f != null) {
+      final file = File(f.path);
+      final len = await file.length();
+      setState(() { _orig = file; _s1 = len; _comp = null; });
+      await _run();
     }
   }
 
-  Future<void> _compressImage() async {
-    if (_originalImage == null) return;
-    setState(() => _isProcessing = true);
+  Future<void> _run() async {
+    if (_orig == null) return;
+    setState(() => _busy = true);
     try {
-      final result = await FlutterImageCompress.compressWithFile(
-        _originalImage!.absolute.path,
-        minWidth: 1600,
-        minHeight: 1600,
-        quality: _quality.toInt(),
-      );
-      if (result != null) {
-        setState(() {
-          _compressedBytes = result;
-          _compressedSize = result.length;
-        });
-      }
-    } catch (e) {
-      _showMsg('Ошибка сжатия: $e');
+      final res = await FlutterImageCompress.compressWithFile(_orig!.absolute.path, minWidth: 1600, minHeight: 1600, quality: _q.toInt());
+      if (res != null) setState(() { _comp = res; _s2 = res.length; });
     } finally {
-      if (mounted) setState(() => _isProcessing = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _saveToGallery() async {
-    if (_compressedBytes == null) return;
+  Future<void> _save() async {
+    if (_comp == null) return;
     try {
-      final hasAccess = await Gal.hasAccess();
-      if (!hasAccess) {
-        await Gal.requestAccess();
-      }
-      await Gal.putImageBytes(_compressedBytes!);
-      _showMsg('Фото сохранено в галерею!');
-    } catch (e) {
-      _showMsg('Нет доступа к галерее или ошибка сохранения');
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      await Gal.putImageBytes(_comp!);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сохранено в галерею!')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
     }
   }
 
-  String _formatSize(int bytes) {
-    if (bytes <= 0) return '0 КБ';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} КБ';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} МБ';
-  }
-
-  void _showMsg(String text) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
-  }
+  String _fmt(int b) => b < 1048576 ? '${(b / 1024).toStringAsFixed(1)} КБ' : '${(b / 1048576).toStringAsFixed(2)} МБ';
 
   @override
   Widget build(BuildContext context) {
@@ -175,51 +112,16 @@ class _CompressScreenState extends State<CompressScreen> {
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            if (_originalImage != null) ...[
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(_originalImage!, height: 220, fit: BoxFit.contain),
-              ),
+            if (_orig != null) ...[
+              Image.file(_orig!, height: 220),
               const SizedBox(height: 15),
-              Text('Исходный размер: ${_formatSize(_originalSize)}',
-                  style: const TextStyle(fontSize: 16)),
-              if (_compressedBytes != null)
-                Text('После сжатия: ${_formatSize(_compressedSize)}',
-                    style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-              const SizedBox(height: 20),
-              Text('Качество: ${_quality.toInt()}%'),
-              Slider(
-                value: _quality,
-                min: 10,
-                max: 95,
-                divisions: 17,
-                label: '${_quality.toInt()}%',
-                onChanged: (val) => setState(() => _quality = val),
-                onChangeEnd: (_) => _compressImage(),
-              ),
-              const SizedBox(height: 20),
-              if (_isProcessing)
-                const CircularProgressIndicator()
-              else
-                ElevatedButton.icon(
-                  onPressed: _saveToGallery,
-                  icon: const Icon(Icons.save_alt),
-                  label: const Text('Сохранить в галерею'),
-                  style: ElevatedButton.styleFrom(minimumSize: const Size(220, 50)),
-                ),
-            ] else
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 60),
-                child: Icon(Icons.image_outlined, size: 120, color: Colors.grey),
-              ),
+              Text('Было: ${_fmt(_s1)}'),
+              if (_comp != null) Text('Стало: ${_fmt(_s2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+              Slider(value: _q, min: 10, max: 95, divisions: 17, label: '${_q.toInt()}%', onChanged: (v) => setState(() => _q = v), onChangeEnd: (_) => _run()),
+              if (_busy) const CircularProgressIndicator() else ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить')),
+            ] else const Icon(Icons.image, size: 120, color: Colors.grey),
             const SizedBox(height: 20),
-            OutlinedButton.icon(
-              onPressed: _pickImage,
-              icon: const Icon(Icons.photo_library),
-              label: const Text('Выбрать фото'),
-              style: OutlinedButton.styleFrom(minimumSize: const Size(220, 50)),
-            ),
+            OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
           ],
         ),
       ),
@@ -227,68 +129,46 @@ class _CompressScreenState extends State<CompressScreen> {
   }
 }
 
-// ==========================================
-// 2. شاشة التحويل إلى PDF (В PDF)
-// ==========================================
-class PdfScreen extends StatefulWidget {
-  const PdfScreen({super.key});
-
-  @override
-  State<PdfScreen> createState() => _PdfScreenState();
-}
-
-Future<Uint8List> _generatePdfInBackground(List<String> paths) async {
+Future<Uint8List> _pdfTask(List<String> paths) async {
   final pdf = pw.Document();
-  for (final path in paths) {
-    final bytes = await File(path).readAsBytes();
-    img.Image? decoded = img.decodeImage(bytes);
-    if (decoded != null) {
-      if (decoded.width > 1600 || decoded.height > 1600) {
-        decoded = img.copyResize(decoded, width: 1600);
-      }
-      final resizedBytes = Uint8List.fromList(img.encodeJpg(decoded, quality: 85));
-      final pdfImage = pw.MemoryImage(resizedBytes);
-      pdf.addPage(
-        pw.Page(
-          build: (pw.Context context) => pw.Center(child: pw.Image(pdfImage)),
-        ),
-      );
+  for (final p in paths) {
+    var im = img.decodeImage(await File(p).readAsBytes());
+    if (im != null) {
+      if (im.width > 1600 || im.height > 1600) im = img.copyResize(im, width: 1600);
+      final jpg = Uint8List.fromList(img.encodeJpg(im, quality: 85));
+      pdf.addPage(pw.Page(build: (_) => pw.Center(child: pw.Image(pw.MemoryImage(jpg)))));
     }
   }
   return pdf.save();
 }
 
-class _PdfScreenState extends State<PdfScreen> {
-  final ImagePicker _picker = ImagePicker();
-  List<XFile> _images = [];
-  bool _isBuilding = false;
+class PdfScreen extends StatefulWidget {
+  const PdfScreen({super.key});
+  @override
+  State<PdfScreen> createState() => _PdfScreenState();
+}
 
-  Future<void> _pickImages() async {
-    final List<XFile> selected = await _picker.pickMultiImage();
-    if (selected.isNotEmpty) {
-      setState(() => _images = selected);
-    }
+class _PdfScreenState extends State<PdfScreen> {
+  final _picker = ImagePicker();
+  List<XFile> _imgs = [];
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    final s = await _picker.pickMultiImage();
+    if (s.isNotEmpty) setState(() => _imgs = s);
   }
 
-  Future<void> _createAndSharePdf() async {
-    if (_images.isEmpty) return;
-    setState(() => _isBuilding = true);
+  Future<void> _make() async {
+    if (_imgs.isEmpty) return;
+    setState(() => _busy = true);
     try {
-      final paths = _images.map((e) => e.path).toList();
-      final pdfBytes = await compute(_generatePdfInBackground, paths);
-
+      final bytes = await compute(_pdfTask, _imgs.map((e) => e.path).toList());
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/document_${DateTime.now().millisecondsSinceEpoch}.pdf');
-      await file.writeAsBytes(pdfBytes);
-
-      await Share.shareXFiles([XFile(file.path)], text: 'Мой PDF документ');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Ошибка создания PDF: $e')));
-      }
+      final f = File('${dir.path}/doc_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      await f.writeAsBytes(bytes);
+      await Share.shareXFiles([XFile(f.path)]);
     } finally {
-      if (mounted) setState(() => _isBuilding = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -301,13 +181,103 @@ class _PdfScreenState extends State<PdfScreen> {
         child: Column(
           children: [
             Expanded(
-              child: _images.isEmpty
-                  ? const Center(
-                      child: Text('Выберите одно или несколько фото',
-                          style: TextStyle(fontSize: 16, color: Colors.grey)))
-                  : GridView.count(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                      children: _images
-                          .map((imgFile) => Image.file(
+              child: _imgs.isEmpty
+                  ? const Center(child: Text('Выберите фото'))
+                  : ListView.builder(
+                      itemCount: _imgs.length,
+                      itemBuilder: (_, i) => ListTile(
+                        leading: Image.file(File(_imgs[i].path), width: 50, height: 50, fit: BoxFit.cover),
+                        title: Text('Фото ${i + 1}'),
+                      ),
+                    ),
+            ),
+            if (_busy) const CircularProgressIndicator() else ...[
+              OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.add_photo_alternate), label: const Text('Выбрать фото')),
+              const SizedBox(height: 10),
+              if (_imgs.isNotEmpty) ElevatedButton.icon(onPressed: _make, icon: const Icon(Icons.share), label: Text('Создать PDF (${_imgs.length})')),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Uint8List? _bgTask(Map<String, dynamic> m) {
+  var im = img.decodeImage(m['b'] as Uint8List);
+  if (im == null) return null;
+  if (im.width > 1200 || im.height > 1200) im = img.copyResize(im, width: 1200);
+  final rgba = im.convert(numChannels: 4);
+  final bg = rgba.getPixel(0, 0);
+  final tol = (m['t'] as int) * 3;
+  for (int y = 0; y < rgba.height; y++) {
+    for (int x = 0; x < rgba.width; x++) {
+      final p = rgba.getPixel(x, y);
+      if ((p.r - bg.r).abs() + (p.g - bg.g).abs() + (p.b - bg.b).abs() < tol) rgba.setPixelRgba(x, y, 0, 0, 0, 0);
+    }
+  }
+  return Uint8List.fromList(img.encodePng(rgba));
+}
+
+class RemoveBgScreen extends StatefulWidget {
+  const RemoveBgScreen({super.key});
+  @override
+  State<RemoveBgScreen> createState() => _RemoveBgScreenState();
+}
+
+class _RemoveBgScreenState extends State<RemoveBgScreen> {
+  final _picker = ImagePicker();
+  Uint8List? _orig, _out;
+  double _tol = 35;
+  bool _busy = false;
+
+  Future<void> _pick() async {
+    final f = await _picker.pickImage(source: ImageSource.gallery);
+    if (f != null) {
+      final b = await File(f.path).readAsBytes();
+      setState(() { _orig = b; _out = null; });
+      await _run();
+    }
+  }
+
+  Future<void> _run() async {
+    if (_orig == null) return;
+    setState(() => _busy = true);
+    try {
+      final res = await compute(_bgTask, {'b': _orig!, 't': _tol.toInt()});
+      setState(() => _out = res);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_out == null) return;
+    try {
+      if (!await Gal.hasAccess()) await Gal.requestAccess();
+      await Gal.putImageBytes(_out!);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PNG сохранен!')));
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Убрать фон')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            if (_out != null) ...[
+              Container(color: Colors.grey.shade300, child: Image.memory(_out!, height: 220)),
+              Slider(value: _tol, min: 10, max: 90, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _run()),
+              ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить PNG')),
+            ] else if (_busy) const CircularProgressIndicator() else const Icon(Icons.auto_fix_high, size: 120, color: Colors.grey),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
+          ],
+        ),
+      ),
+    );
+  }
+}
