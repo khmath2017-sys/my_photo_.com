@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -139,7 +138,7 @@ class _CompressScreenState extends State<CompressScreen> {
     } catch (e) {
       _showMsg('Ошибка сжатия: $e');
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -238,7 +237,6 @@ class PdfScreen extends StatefulWidget {
   State<PdfScreen> createState() => _PdfScreenState();
 }
 
-// دالة المعالجة في الخلفية لحماية الواجهة من التجمد
 Future<Uint8List> _generatePdfInBackground(List<String> paths) async {
   final pdf = pw.Document();
   for (final path in paths) {
@@ -307,6 +305,9 @@ class _PdfScreenState extends State<PdfScreen> {
                   ? const Center(
                       child: Text('Выберите одно или несколько фото',
                           style: TextStyle(fontSize: 16, color: Colors.grey)))
-                  : GridView.builder(
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3, crossAxisSpacing: 8, mainAxisSpacing: 8),
+                  : GridView.count(
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      children: _images
+                          .map((imgFile) => Image.file(
