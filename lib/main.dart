@@ -269,9 +269,14 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
     if (_out == null) return;
     try {
       if (!await Gal.hasAccess()) await Gal.requestAccess();
-      await Gal.putImageBytes(_out!);
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PNG сохранен!')));
-    } catch (_) {}
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/nobg_${DateTime.now().millisecondsSinceEpoch}.png');
+      await file.writeAsBytes(_out!);
+      await Gal.putImage(file.path);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Прозрачный PNG сохранен!')));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ошибка сохранения')));
+    }
   }
 
   @override
@@ -283,8 +288,17 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
         child: Column(
           children: [
             if (_out != null) ...[
-              Container(color: Colors.grey.shade300, child: Image.memory(_out!, height: 220)),
-              Slider(value: _tol, min: 10, max: 90, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _run()),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blueGrey.shade800,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Image.memory(_out!, height: 220),
+              ),
+              const SizedBox(height: 10),
+              Text('Чувствительность: ${_tol.toInt()}'),
+              Slider(value: _tol, min: 5, max: 80, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _run()),
               ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить PNG')),
             ] else if (_busy) const CircularProgressIndicator() else const Icon(Icons.auto_fix_high, size: 120, color: Colors.grey),
             const SizedBox(height: 20),
