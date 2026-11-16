@@ -71,21 +71,18 @@ class HomePage extends StatelessWidget {
   }
 }
 
-Uint8List? _compressTask(Map<String, dynamic> m) {
+Map<String, dynamic>? _compressTask(Map<String, dynamic> m) {
   var im = img.decodeImage(m['bytes'] as Uint8List);
   if (im == null) return null;
   final int scale = m['scale'] as int;
   final int quality = m['quality'] as int;
 
-  if (scale < 100) {
-    final newW = (im.width * scale / 100).round();
-    if (newW > 50) {
-      im = img.copyResize(im, width: newW);
-    }
-  } else if (im.width > 2000 || im.height > 2000) {
-    im = img.copyResize(im, width: 2000);
-  }
-  return Uint8List.fromList(img.encodeJpg(im, quality: quality));
+  final int newW = ((im.width * scale) / 100).round().clamp(50, 4000);
+  final int newH = ((im.height * scale) / 100).round().clamp(50, 4000);
+  im = img.copyResize(im, width: newW, height: newH);
+
+  final outBytes = Uint8List.fromList(img.encodeJpg(im, quality: quality));
+  return {'bytes': outBytes, 'w': im.width, 'h': im.height};
 }
 
 class CompressScreen extends StatefulWidget {
@@ -98,8 +95,8 @@ class _CompressScreenState extends State<CompressScreen> {
   final _picker = ImagePicker();
   Uint8List? _origBytes, _compBytes;
   double _quality = 70;
-  double _scale = 80;
-  int _s1 = 0, _s2 = 0;
+  double _scale = 75;
+  int _s1 = 0, _s2 = 0, _w = 0, _h = 0;
   bool _busy = false;
 
   Future<void> _pick() async {
@@ -126,8 +123,10 @@ class _CompressScreenState extends State<CompressScreen> {
       });
       if (res != null && mounted) {
         setState(() {
-          _compBytes = res;
-          _s2 = res.length;
+          _compBytes = res['bytes'] as Uint8List;
+          _s2 = _compBytes!.length;
+          _w = res['w'] as int;
+          _h = res['h'] as int;
         });
       }
     } finally {
@@ -158,6 +157,7 @@ class _CompressScreenState extends State<CompressScreen> {
   @override
   Widget build(BuildContext context) {
     final int savedPercent = (_s1 > 0 && _s2 > 0) ? (((_s1 - _s2) / _s1) * 100).round() : 0;
+    final double previewHeight = (100 + (_scale * 1.4)).clamp(110, 240);
     return Scaffold(
       appBar: AppBar(title: const Text('Сжать фото')),
       body: SingleChildScrollView(
@@ -165,14 +165,21 @@ class _CompressScreenState extends State<CompressScreen> {
         child: Column(
           children: [
             if (_origBytes != null) ...[
-              Image.memory(_compBytes ?? _origBytes!, height: 210),
-              const SizedBox(height: 12),
+              SizedBox(
+                height: 245,
+                child: Center(
+                  child: Image.memory(_compBytes ?? _origBytes!, height: previewHeight),
+                ),
+              ),
+              const SizedBox(height: 10),
               Text('Было: ${_fmt(_s1)}', style: const TextStyle(fontSize: 16)),
-              if (_compBytes != null)
+              if (_compBytes != null) ...[
                 Text(
-                  'Стало: ${_fmt(_s2)} (${savedPercent > 0 ? "-$savedPercent%" : "оптимально"})',
+                  'Стало: ${_fmt(_s2)} (${savedPercent > 0 ? "-$savedPercent%" : "сжато"})',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
                 ),
+                Text('Разрешение: $_w × $_h пикс.', style: const TextStyle(color: Colors.grey)),
+              ],
               const SizedBox(height: 10),
               Text('Качество: ${_quality.toInt()}%'),
               Slider(
@@ -186,9 +193,9 @@ class _CompressScreenState extends State<CompressScreen> {
               Text('Размер (масштаб): ${_scale.toInt()}%'),
               Slider(
                 value: _scale,
-                min: 20,
+                min: 10,
                 max: 100,
-                divisions: 8,
+                divisions: 9,
                 onChanged: (v) => setState(() => _scale = v),
                 onChangeEnd: (_) => _run(),
               ),
@@ -219,6 +226,7 @@ class _CompressScreenState extends State<CompressScreen> {
     );
   }
 }
+
 
 Future<Uint8List> _pdfTask(List<String> paths) async {
   final pdf = pw.Document();
@@ -297,35 +305,54 @@ class _PdfScreenState extends State<PdfScreen> {
 Uint8List? _bgTask(Map<String, dynamic> m) {
   var im = img.decodeImage(m['b'] as Uint8List);
   if (im == null) return null;
-  if (im.width > 1200 || im.height > 1200) im = img.copyResize(im, width: 1200);
+  if (im.width > 1000 || im.height > 1000) im = img.copyResize(im, width: 1000);
   final rgba = im.convert(numChannels: 4);
+  final int w = rgba.width;
+  final int h = rgba.height;
 
-  // أخذ متوسط لون الزوايا الأربع بدلاً من زاوية واحدة لدقة أعلى
-  final p1 = rgba.getPixel(2, 2);
-  final p2 = rgba.getPixel(rgba.width - 3, 2);
-  final p3 = rgba.getPixel(2, rgba.height - 3);
-  final p4 = rgba.getPixel(rgba.width - 3, rgba.height - 3);
+  final bg = rgba.getPixel(0, 0);
+  final num bgR = bg.r, bgG = bg.g, bgB = bg.b;
+  final int tol = (m['t'] as int) * 3;
 
-  final bgR = (p1.r + p2.r + p3.r + p4.r) / 4;
-  final bgG = (p1.g + p2.g + p3.g + p4.g) / 4;
-  final bgB = (p1.b + p2.b + p3.b + p4.b) / 4;
+  final visited = Uint8List(w * h);
+  final queue = <int>[];
 
-  final tol = (m['t'] as int) * 3;
-  for (int y = 0; y < rgba.height; y++) {
-    for (int x = 0; x < rgba.width; x++) {
-      final p = rgba.getPixel(x, y);
-      final diff = (p.r - bgR).abs() + (p.g - bgG).abs() + (p.b - bgB).abs();
-      if (diff < tol) {
-        rgba.setPixelRgba(x, y, 0, 0, 0, 0);
-      } else if (diff < tol + 25) {
-        // تنعيم الحواف لتجنب التعرجات الحادة
-        final alpha = (((diff - tol) / 25) * 255).round().clamp(0, 255);
-        rgba.setPixelRgba(x, y, p.r.toInt(), p.g.toInt(), p.b.toInt(), alpha);
-      }
+  void tryAdd(int x, int y) {
+    if (x < 0 || x >= w || y < 0 || y >= h) return;
+    final idx = y * w + x;
+    if (visited[idx] == 1) return;
+    visited[idx] = 1;
+    final p = rgba.getPixel(x, y);
+    final diff = (p.r - bgR).abs() + (p.g - bgG).abs() + (p.b - bgB).abs();
+    if (diff < tol) {
+      queue.add(idx);
     }
   }
+
+  for (int x = 0; x < w; x++) {
+    tryAdd(x, 0);
+    tryAdd(x, h - 1);
+  }
+  for (int y = 0; y < h; y++) {
+    tryAdd(0, y);
+    tryAdd(w - 1, y);
+  }
+
+  int head = 0;
+  while (head < queue.length) {
+    final idx = queue[head++];
+    final x = idx % w;
+    final y = idx ~/ w;
+    rgba.setPixelRgba(x, y, 0, 0, 0, 0);
+    tryAdd(x + 1, y);
+    tryAdd(x - 1, y);
+    tryAdd(x, y + 1);
+    tryAdd(x, y - 1);
+  }
+
   return Uint8List.fromList(img.encodePng(rgba));
 }
+
 Uint8List? _mergeBgTask(Map<String, dynamic> m) {
   final fg = img.decodeImage(m['fg'] as Uint8List);
   if (fg == null) return null;
