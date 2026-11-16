@@ -66,7 +66,7 @@ class _CompressScreenState extends State<CompressScreen> {
   final _picker = ImagePicker();
   File? _orig;
   Uint8List? _comp;
-  double _q = 70;
+  double _q = 50;
   int _s1 = 0, _s2 = 0;
   bool _busy = false;
 
@@ -84,7 +84,14 @@ class _CompressScreenState extends State<CompressScreen> {
     if (_orig == null) return;
     setState(() => _busy = true);
     try {
-      final res = await FlutterImageCompress.compressWithFile(_orig!.absolute.path, minWidth: 1600, minHeight: 1600, quality: _q.toInt());
+      final int maxDim = (600 + (_q * 12)).toInt();
+      final res = await FlutterImageCompress.compressWithFile(
+        _orig!.absolute.path,
+        minWidth: maxDim,
+        minHeight: maxDim,
+        quality: _q.toInt(),
+        format: CompressFormat.jpeg,
+      );
       if (res != null) setState(() { _comp = res; _s2 = res.length; });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -106,6 +113,7 @@ class _CompressScreenState extends State<CompressScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final int savedPercent = (_s1 > 0 && _s2 > 0) ? (((_s1 - _s2) / _s1) * 100).round() : 0;
     return Scaffold(
       appBar: AppBar(title: const Text('Сжать фото')),
       body: SingleChildScrollView(
@@ -113,12 +121,18 @@ class _CompressScreenState extends State<CompressScreen> {
         child: Column(
           children: [
             if (_orig != null) ...[
-              Image.file(_orig!, height: 220),
+              _comp != null ? Image.memory(_comp!, height: 220) : Image.file(_orig!, height: 220),
               const SizedBox(height: 15),
-              Text('Было: ${_fmt(_s1)}'),
-              if (_comp != null) Text('Стало: ${_fmt(_s2)}', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-              Slider(value: _q, min: 10, max: 95, divisions: 17, label: '${_q.toInt()}%', onChanged: (v) => setState(() => _q = v), onChangeEnd: (_) => _run()),
-              if (_busy) const CircularProgressIndicator() else ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить')),
+              Text('Было: ${_fmt(_s1)}', style: const TextStyle(fontSize: 16)),
+              if (_comp != null)
+                Text(
+                  'Стало: ${_fmt(_s2)} (${savedPercent > 0 ? "-$savedPercent%" : "мин. размер"})',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                ),
+              const SizedBox(height: 10),
+              Text('Качество: ${_q.toInt()}%'),
+              Slider(value: _q, min: 10, max: 90, divisions: 16, label: '${_q.toInt()}%', onChanged: (v) => setState(() => _q = v), onChangeEnd: (_) => _run()),
+              if (_busy) const CircularProgressIndicator() else ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить в галерею')),
             ] else const Icon(Icons.image, size: 120, color: Colors.grey),
             const SizedBox(height: 20),
             OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
@@ -270,14 +284,3 @@ class _RemoveBgScreenState extends State<RemoveBgScreen> {
           children: [
             if (_out != null) ...[
               Container(color: Colors.grey.shade300, child: Image.memory(_out!, height: 220)),
-              Slider(value: _tol, min: 10, max: 90, onChanged: (v) => setState(() => _tol = v), onChangeEnd: (_) => _run()),
-              ElevatedButton.icon(onPressed: _save, icon: const Icon(Icons.save), label: const Text('Сохранить PNG')),
-            ] else if (_busy) const CircularProgressIndicator() else const Icon(Icons.auto_fix_high, size: 120, color: Colors.grey),
-            const SizedBox(height: 20),
-            OutlinedButton.icon(onPressed: _pick, icon: const Icon(Icons.photo), label: const Text('Выбрать фото')),
-          ],
-        ),
-      ),
-    );
-  }
-}
