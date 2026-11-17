@@ -54,9 +54,6 @@ jobs:
         EOF
 
     - name: Install dependencies
-      run: flutter pub get
-    
-    - name: Install dependencies
       run: |
         flutter pub get
         dart run flutter_launcher_icons
