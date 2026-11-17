@@ -55,7 +55,11 @@ jobs:
 
     - name: Install dependencies
       run: flutter pub get
-      
+    
+    - name: Install dependencies
+      run: |
+        flutter pub get
+        dart run flutter_launcher_icons
     - name: Build Signed AAB (For RuStore)
       run: flutter build appbundle --release
 
