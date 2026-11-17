@@ -28,7 +28,7 @@ jobs:
 
     - name: Decode Keystore and Configure Signing
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | tr -d '\n\r ' | base64 -d > android/app/upload-keystore.jks
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | grep -v "BEGIN\|END" | tr -d '\n\r ' | base64 -d > android/app/upload-keystore.jks
         cat <<EOF > android/key.properties
         storePassword=${{ secrets.STORE_PASSWORD }}
         keyPassword=${{ secrets.KEY_PASSWORD }}
