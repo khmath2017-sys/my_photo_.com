@@ -39,8 +39,6 @@ jobs:
         sed -i 's/android:label="myphoto"/android:label="Фоторедактор ИИ и PDF"/g' android/app/src/main/AndroidManifest.xml || true
         echo "-keep class ai.onnxruntime.** { *; }" >> android/app/proguard-rules.pro
         
-        sed -i 's/signingConfig = signingConfigs.getByName("debug")/signingConfig = signingConfigs.getByName("release")/g' android/app/build.gradle.kts
-        
         cat << 'EOF' >> android/app/build.gradle.kts
 
         extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
@@ -49,7 +47,7 @@ jobs:
                 abortOnError = false
             }
             signingConfigs {
-                create("release") {
+                getByName("debug") {
                     keyAlias = System.getenv("KEY_ALIAS")
                     keyPassword = System.getenv("KEY_PASSWORD")
                     storeFile = file("upload-keystore.jks")
