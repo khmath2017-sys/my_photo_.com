@@ -26,14 +26,10 @@ jobs:
     - name: Generate Android files
       run: flutter create . --org com.khmath --project-name myphoto --platforms=android
 
-    - name: Decode Keystore and Configure Gradle Signing
-      env:
-        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+    - name: Generate Keystore and Configure Signing
       run: |
-        echo "$KEYSTORE_BASE64" | grep -v "BEGIN\|END" | tr -d '\n\r ' | base64 -d > android/app/upload-keystore.jks
+        keytool -genkey -v -keystore android/app/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload -storepass MyStrongPass123 -keypass MyStrongPass123 -dname "CN=Khaled, OU=Dev, O=KhMath, L=Moscow, S=Moscow, C=RU"
+        
         sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle.kts || true
         sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts || true
         sed -i 's/android:label="myphoto"/android:label="Фоторедактор ИИ и PDF"/g' android/app/src/main/AndroidManifest.xml || true
@@ -48,10 +44,10 @@ jobs:
             }
             signingConfigs {
                 getByName("debug") {
-                    keyAlias = System.getenv("KEY_ALIAS")
-                    keyPassword = System.getenv("KEY_PASSWORD")
+                    keyAlias = "upload"
+                    keyPassword = "MyStrongPass123"
                     storeFile = file("upload-keystore.jks")
-                    storePassword = System.getenv("STORE_PASSWORD")
+                    storePassword = "MyStrongPass123"
                 }
             }
         }
@@ -61,27 +57,16 @@ jobs:
       run: flutter pub get
       
     - name: Build Signed AAB (For RuStore)
-      env:
-        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: flutter build appbundle --release
 
     - name: Build Signed APK (For Testing)
-      env:
-        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: flutter build apk --release
       
-    - name: Upload RuStore AAB
+    - name: Upload RuStore Final Package
       uses: actions/upload-artifact@v4
       with:
-        name: rustore-release-aab
-        path: build/app/outputs/bundle/release/app-release.aab
-
-    - name: Upload Signed APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: signed-release-apk
-        path: build/app/outputs/flutter-apk/app-release.apk
+        name: rustore-final-package
+        path: |
+          build/app/outputs/bundle/release/app-release.aab
+          build/app/outputs/flutter-apk/app-release.apk
+          android/app/upload-keystore.jks
