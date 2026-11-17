@@ -56,6 +56,7 @@ jobs:
     - name: Install dependencies
       run: |
         flutter pub get
+        rm -rf android/app/src/main/res/mipmap-*
         dart run flutter_launcher_icons
     - name: Build Signed AAB (For RuStore)
       run: flutter build appbundle --release
