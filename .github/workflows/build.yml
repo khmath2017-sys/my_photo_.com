@@ -42,24 +42,24 @@ jobs:
         sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts || true
         sed -i 's/android:label="myphoto"/android:label="Фоторедактор ИИ и PDF"/g' android/app/src/main/AndroidManifest.xml || true
         echo "-keep class ai.onnxruntime.** { *; }" >> android/app/proguard-rules.pro
-        cat <<EOF >> android/app/build.gradle.kts
+        cat << 'EOF' >> android/app/build.gradle.kts
 
-        val keystoreProperties = java.util.Properties()
-        val keystorePropertiesFile = rootProject.file("key.properties")
-        if (keystorePropertiesFile.exists()) {
-            keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
+        val keystoreProps = java.util.Properties()
+        val keystorePropsFile = rootProject.file("key.properties")
+        if (keystorePropsFile.exists()) {
+            keystorePropsFile.inputStream().use { keystoreProps.load(it) }
         }
-        android {
+        extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
             lint {
                 checkReleaseBuilds = false
                 abortOnError = false
             }
             signingConfigs {
                 create("release") {
-                    keyAlias = keystoreProperties.getProperty("keyAlias")
-                    keyPassword = keystoreProperties.getProperty("keyPassword")
-                    storeFile = file(keystoreProperties.getProperty("storeFile"))
-                    storePassword = keystoreProperties.getProperty("storePassword")
+                    keyAlias = keystoreProps.getProperty("keyAlias")
+                    keyPassword = keystoreProps.getProperty("keyPassword")
+                    storeFile = file(keystoreProps.getProperty("storeFile"))
+                    storePassword = keystoreProps.getProperty("storePassword")
                 }
             }
             buildTypes {
