@@ -26,29 +26,23 @@ jobs:
     - name: Generate Android files
       run: flutter create . --org com.khmath --project-name myphoto --platforms=android
 
-    - name: Decode Keystore and Configure Signing
+    - name: Decode Keystore and Configure Gradle Signing
+      env:
+        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | grep -v "BEGIN\|END" | tr -d '\n\r ' | base64 -d > android/app/upload-keystore.jks
-        cat <<EOF > android/key.properties
-        storePassword=${{ secrets.STORE_PASSWORD }}
-        keyPassword=${{ secrets.KEY_PASSWORD }}
-        keyAlias=${{ secrets.KEY_ALIAS }}
-        storeFile=upload-keystore.jks
-        EOF
-
-    - name: Configure Gradle SDK, App Name and Release Signing
-      run: |
+        echo "$KEYSTORE_BASE64" | grep -v "BEGIN\|END" | tr -d '\n\r ' | base64 -d > android/app/upload-keystore.jks
         sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 21/g' android/app/build.gradle.kts || true
         sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 36/g' android/app/build.gradle.kts || true
         sed -i 's/android:label="myphoto"/android:label="Фоторедактор ИИ и PDF"/g' android/app/src/main/AndroidManifest.xml || true
         echo "-keep class ai.onnxruntime.** { *; }" >> android/app/proguard-rules.pro
+        
+        sed -i 's/signingConfig = signingConfigs.getByName("debug")/signingConfig = signingConfigs.getByName("release")/g' android/app/build.gradle.kts
+        
         cat << 'EOF' >> android/app/build.gradle.kts
 
-        val keystoreProps = java.util.Properties()
-        val keystorePropsFile = rootProject.file("key.properties")
-        if (keystorePropsFile.exists()) {
-            keystorePropsFile.inputStream().use { keystoreProps.load(it) }
-        }
         extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
             lint {
                 checkReleaseBuilds = false
@@ -56,15 +50,10 @@ jobs:
             }
             signingConfigs {
                 create("release") {
-                    keyAlias = keystoreProps.getProperty("keyAlias")
-                    keyPassword = keystoreProps.getProperty("keyPassword")
-                    storeFile = file(keystoreProps.getProperty("storeFile"))
-                    storePassword = keystoreProps.getProperty("storePassword")
-                }
-            }
-            buildTypes {
-                getByName("release") {
-                    signingConfig = signingConfigs.getByName("release")
+                    keyAlias = System.getenv("KEY_ALIAS")
+                    keyPassword = System.getenv("KEY_PASSWORD")
+                    storeFile = file("upload-keystore.jks")
+                    storePassword = System.getenv("STORE_PASSWORD")
                 }
             }
         }
@@ -74,9 +63,17 @@ jobs:
       run: flutter pub get
       
     - name: Build Signed AAB (For RuStore)
+      env:
+        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: flutter build appbundle --release
 
     - name: Build Signed APK (For Testing)
+      env:
+        STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
       run: flutter build apk --release
       
     - name: Upload RuStore AAB
